@@ -1,0 +1,58 @@
+# 1. Disable direct root login (use an unprivileged user + sudo)
+
+PermitRootLogin no
+
+# 2. Disable password authentication entirely (forces SSH keypairs)
+
+PasswordAuthentication no
+ChallengeResponseAuthentication no
+KbdInteractiveAuthentication no
+
+# 3. Restrict authentication to public key only
+
+PubkeyAuthentication yes
+AuthorizedKeysFile $HOME/.ssh/authorized_keys
+
+# 4. Limit connection attempts per unauthenticated session
+
+MaxAuthTries 3
+
+# 5. Drop idle/unresponsive sessions (checks every 5 min, disconnects after 2 misses)
+
+ClientAliveInterval 300
+ClientAliveCountMax 2
+
+# 6. Restrict user/group access (only allow specific users)
+
+# AllowUsers deployer sysadmin
+
+AllowGroups ssh-allow
+
+# 7. Disable unused features that increase attack surface
+
+X11Forwarding no
+AllowAgentForwarding no
+AllowTcpForwarding no
+PermitEmptyPasswords no
+
+# Drops 30% of incoming unauthenticated connections once 10 are pending,
+
+# scaling up to dropping 100% when 60 concurrent attempts are reached.
+
+MaxStartups 10:30:60
+
+# Reduce the time an unauthenticated user has to complete login (default 120s)
+
+LoginGraceTime 30
+
+# Restrict to robust KEX algorithms
+
+KexAlgorithms sntrup761x25519-sha512@openssh.com,curve25519-sha256,curve25519-sha256@libssh.org,diffie-hellman-group-exchange-sha256
+
+# Restrict to authenticated encryption ciphers
+
+Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com
+
+# Restrict to secure MACs (used only with non-AEAD ciphers)
+
+MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com
