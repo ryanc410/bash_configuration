@@ -30,5 +30,8 @@ if [[ -f "$BASH_CONFIG_DIR/local.bash" && -r "$BASH_CONFIG_DIR/local.bash" ]]; t
     source "$BASH_CONFIG_DIR/local.bash"
 fi
 
+# Add Scripts Directory to PATH
+export PATH="$PATH:$HOME/.config/bash/scripts"
+
 # Clean up namespace
 unset BASH_MODULES module file
