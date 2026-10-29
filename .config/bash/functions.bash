@@ -75,67 +75,49 @@ psg() {
   ps aux | grep -v grep | grep -i --color=auto "$1"
 }
 
-# ======================== #
-# Function to check auth.log for failed
-# authentication attempts and block the 
-# source IP address
-# Usage:
-#   block_failed_ssh 
-block_failed_ssh() {
-    local threshold="${1:-5}"   # Default threshold: 5 failed attempts
-    local auth_log=""
-    
-    # 1. Detect log source (systemd journal vs text log files)
-    if [[ -f /var/log/auth.log ]]; then
-        auth_log="/var/log/auth.log"          # Debian / Ubuntu
-    elif [[ -f /var/log/secure ]]; then
-        auth_log="/var/log/secure"            # RHEL / CentOS / AlmaLinux / Rocky
-    fi
-
-    echo "[*] Checking for SSH brute-force attempts (threshold: ${threshold} failures)..."
-
-    # 2. Extract failed IPs and attempt counts
-    local failed_ips
-    if [[ -n "$auth_log" ]]; then
-        failed_ips=$(grep -E 'Failed password|authentication failure' "$auth_log" \
-            | grep -oE '\b([0-9]{1,3}\.){3}[0-9]{1,3}\b' \
-            | sort | uniq -c)
-    elif command -v journalctl >/dev/null 2>&1; then
-        failed_ips=$(journalctl -u ssh -u sshd --no-pager 2>/dev/null \
-            | grep -E 'Failed password|authentication failure' \
-            | grep -oE '\b([0-9]{1,3}\.){3}[0-9]{1,3}\b' \
-            | sort | uniq -c)
-    else
-        echo "[-] Error: Neither auth.log, secure, nor journalctl found." >&2
+# ======================================= #
+# Encrypt a file (creates <filename>.enc)
+# ======================================= #
+enc-file() {
+    if [ -z "$1" ] || [ ! -f "$1" ]; then
+        echo "Usage: enc-file <filepath>" >&2
         return 1
     fi
+    openssl enc -aes-256-cbc -salt -pbkdf2 -in "$1" -out "$1.enc"
+}
 
-    if [[ -z "$failed_ips" ]]; then
-        echo "[+] No failed login records found."
-        return 0
+# ================================================================ #
+# Decrypt a file (removes trailing .enc or creates <filename>.dec)
+# ================================================================ #
+dec-file() {
+    if [ -z "$1" ] || [ ! -f "$1" ]; then
+        echo "Usage: dec-file <filepath.enc>" >&2
+        return 1
     fi
+    local outfile="${1%.enc}"
+    [[ "$outfile" == "$1" ]] && outfile="$1.dec"
+    openssl enc -d -aes-256-cbc -pbkdf2 -in "$1" -out "$outfile"
+}
 
-    # 3. Iterate through results and apply iptables rule
-    local blocked_count=0
-    while read -r count ip; do
-        [[ -z "$ip" ]] && continue
-
-        # Safety check: Prevent blocking localhost / private ranges if desired
-        if [[ "$ip" =~ ^127\. ]] || [[ "$ip" == "0.0.0.0" ]]; then
-            continue
-        fi
-
-        if (( count >= threshold )); then
-            # Verify if IP is already blocked in iptables
-            if iptables -C INPUT -s "$ip" -j DROP 2>/dev/null; then
-                echo "[-] IP $ip already blocked (${count} failed attempts)."
-            else
-                iptables -I INPUT -s "$ip" -p tcp --dport 22 -j DROP
-                echo "[!] Blocked $ip (${count} failed attempts)."
-                ((blocked_count++))
-            fi
-        fi
-    done <<< "$failed_ips"
-
-    echo "[+] Done. Newly blocked: ${blocked_count} IP(s)."
+# ==================================================== #
+# Encrypt a file symmetrically (creates <filename>.gpg)
+# ==================================================== #
+gpg-file() {
+    if [ -z "$1" ] || [ ! -f "$1" ]; then
+        echo "Usage: enc-gpg-file <filepath>" >&2
+        return 1
+    fi
+    gpg --symmetric --quiet --output "$1.gpg" "$1"
+}
+# =================== #
+# Decrypt a GPG file
+# =================== #
+dgpg-file() {
+    if [ -z "$1" ] || [ ! -f "$1" ]; then
+        echo "Usage: dec-gpg-file <filepath.gpg>" >&2
+        return 1
+    fi
+    local outfile="${1%.gpg}"
+    [[ "$outfile" == "$1" ]] && outfile="$1.dec"
+    gpg --decrypt --quiet --output "$outfile" "$1"
 }
